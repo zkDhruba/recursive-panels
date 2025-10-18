@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { observer } from "mobx-react-lite";
 import { paneStore } from "../lib/store";
 import type { Node, SplitNode } from "../lib/types";
