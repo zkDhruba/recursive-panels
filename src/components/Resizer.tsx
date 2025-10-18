@@ -12,7 +12,12 @@ export const Resizer: React.FC<ResizerProps> = ({
   initialRatio,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
+  const [currentRatio, setCurrentRatio] = useState(initialRatio);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setCurrentRatio(initialRatio);
+  }, [initialRatio]);
 
   useEffect(() => {
     if (!isDragging) return;
@@ -45,6 +50,7 @@ export const Resizer: React.FC<ResizerProps> = ({
         }
       }
 
+      setCurrentRatio(ratio);
       onResize(ratio);
     };
 
@@ -61,24 +67,49 @@ export const Resizer: React.FC<ResizerProps> = ({
     };
   }, [isDragging, direction, onResize]);
 
+  const percentage = Math.round(currentRatio * 100);
+
   return (
-    <div
-      ref={containerRef}
-      className={`
-        absolute z-10 bg-gray-800 transition-colors
-        ${
+    <>
+      <div
+        ref={containerRef}
+        className={`
+          absolute z-10 bg-gray-800 transition-colors
+          ${
+            direction === "vertical"
+              ? "w-1 h-full cursor-col-resize hover:bg-gray-600"
+              : "h-1 w-full cursor-row-resize hover:bg-gray-600"
+          }
+          ${isDragging ? "bg-gray-600" : ""}
+        `}
+        style={
           direction === "vertical"
-            ? "w-1 h-full cursor-col-resize hover:bg-gray-600"
-            : "h-1 w-full cursor-row-resize hover:bg-gray-600"
+            ? { left: `${currentRatio * 100}%`, transform: "translateX(-50%)" }
+            : { top: `${currentRatio * 100}%`, transform: "translateY(-50%)" }
         }
-        ${isDragging ? "bg-gray-600" : ""}
-      `}
-      style={
-        direction === "vertical"
-          ? { left: `${initialRatio * 100}%`, transform: "translateX(-50%)" }
-          : { top: `${initialRatio * 100}%`, transform: "translateY(-50%)" }
-      }
-      onMouseDown={() => setIsDragging(true)}
-    />
+        onMouseDown={() => setIsDragging(true)}
+      />
+
+      {isDragging && (
+        <div
+          className="absolute z-20 bg-gray-900 text-white px-3 py-1 rounded-full text-sm font-semibold pointer-events-none shadow-lg"
+          style={
+            direction === "vertical"
+              ? {
+                  left: `${currentRatio * 100}%`,
+                  top: "50%",
+                  transform: "translate(-50%, -50%)",
+                }
+              : {
+                  left: "50%",
+                  top: `${currentRatio * 100}%`,
+                  transform: "translate(-50%, -50%)",
+                }
+          }
+        >
+          {percentage}%
+        </div>
+      )}
+    </>
   );
 };

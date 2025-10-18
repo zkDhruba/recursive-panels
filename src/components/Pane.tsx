@@ -91,7 +91,7 @@ export const Pane: React.FC<PaneProps> = ({
       className="relative w-full h-full flex items-center justify-center transition-colors"
       style={{ backgroundColor: data.color }}
     >
-      <div className="flex">
+      <div>
         <button
           onClick={() => onSplit(data.id, "vertical")}
           className="bg-white px-2 py-1 text-xs text-black border border-black/40 hover:border-black/60 hover:bg-slate-100 rounded-sm"
