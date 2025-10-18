@@ -7,7 +7,6 @@ type Rect = { x: number; y: number; w: number; h: number }; // fractions 0..1
 
 export const PaneView = observer(() => {
   const containerRef = useRef<HTMLDivElement | null>(null);
-
   return (
     <div
       ref={containerRef}
@@ -22,7 +21,7 @@ export const PaneView = observer(() => {
   );
 });
 
-function NodeView({
+const NodeView = observer(function NodeView({
   node,
   rect,
   containerRef,
@@ -32,7 +31,8 @@ function NodeView({
   containerRef: React.RefObject<HTMLDivElement>;
 }) {
   if (node.kind === "leaf") {
-    const leaves = useMemo(() => countLeaves(paneStore.root), [paneStore.root]);
+    // ⬇️ use the computed that depends on the observable tree
+    const leaves = paneStore.leafCount;
 
     return (
       <div
@@ -42,31 +42,26 @@ function NodeView({
           top: `${rect.y * 100}%`,
           width: `${rect.w * 100}%`,
           height: `${rect.h * 100}%`,
-          background: node.color,
+          background: node.color, // <— reading observable field
         }}
       >
-        {/* Controls */}
-        <div className="text-center flex items-center justify-center h-full">
+        <div className="text-center flex items-center justify-center gap-2 h-full">
           <button
             onClick={() => paneStore.split(node.id, "v")}
             className="bg-white px-2 py-1 text-xs text-black border border-black/40 hover:border-black/60 hover:bg-slate-100 rounded-sm"
-            title="Split vertically"
           >
             v
           </button>
           <button
             onClick={() => paneStore.split(node.id, "h")}
             className="bg-white px-2 py-1 text-xs text-black border border-black/40 hover:border-black/60 hover:bg-slate-100 rounded-sm"
-            title="Split horizontally"
           >
             h
           </button>
           {leaves > 1 && (
             <button
               onClick={() => paneStore.remove(node.id)}
-              disabled={leaves <= 1}
               className="bg-white px-2 py-1 text-xs text-black border border-black/40 hover:border-black/60 hover:bg-slate-100 rounded-sm"
-              title="Remove pane"
             >
               -
             </button>
@@ -94,9 +89,9 @@ function NodeView({
       <NodeView node={node.b} rect={bRect} containerRef={containerRef} />
     </>
   );
-}
+});
 
-function Divider({
+const Divider = observer(function Divider({
   node,
   rect,
   containerRef,
@@ -124,12 +119,10 @@ function Divider({
     if (!box) return;
     if (node.dir === "v") {
       const px = clientX - box.left;
-      const ratio = Math.max(0, Math.min(1, px / box.width));
-      paneStore.resize(node.id, ratio);
+      paneStore.resize(node.id, Math.max(0, Math.min(1, px / box.width)));
     } else {
       const py = clientY - box.top;
-      const ratio = Math.max(0, Math.min(1, py / box.height));
-      paneStore.resize(node.id, ratio);
+      paneStore.resize(node.id, Math.max(0, Math.min(1, py / box.height)));
     }
   };
 
@@ -137,14 +130,12 @@ function Divider({
     if (!draggingRef.current) return;
     applyRatioFromPoint(e.clientX, e.clientY);
   };
-
   const onMoveTouch = (e: TouchEvent) => {
     if (!draggingRef.current) return;
     e.preventDefault();
     const t = e.touches[0];
     if (t) applyRatioFromPoint(t.clientX, t.clientY);
   };
-
   const onUp = () => {
     draggingRef.current = false;
     window.removeEventListener("mousemove", onMoveMouse);
@@ -153,6 +144,7 @@ function Divider({
     window.removeEventListener("touchend", onUp);
   };
 
+  // uses observable node.ratio to position itself
   const style =
     node.dir === "v"
       ? {
@@ -170,6 +162,8 @@ function Divider({
           cursor: "row-resize",
         };
 
+  const percent = Math.round(node.ratio * 100);
+
   return (
     <div
       className="absolute z-10 bg-white/40"
@@ -178,18 +172,22 @@ function Divider({
       onTouchStart={onDown}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      title="Drag to resize (snaps to 1/4, 1/2, 3/4)"
+      title="Drag to resize (snaps 25/50/75%)"
     >
-      {/* Thicker hit area */}
       <div
         className={`absolute ${
           node.dir === "v" ? "-left-2 w-4 h-full" : "-top-2 h-4 w-full"
-        } ${hover ? "bg-white/10" : ""}`}
+        } ${hover || draggingRef.current ? "bg-white/10" : ""}`}
       />
+      {(hover || draggingRef.current) && (
+        <div
+          className={`absolute text-[10px] px-1 py-0.5 rounded bg-black/70 text-white ${
+            node.dir === "v" ? "-top-6 -left-6" : "-left-10 -top-5"
+          }`}
+        >
+          {percent}%
+        </div>
+      )}
     </div>
   );
-}
-
-function countLeaves(n: Node): number {
-  return n.kind === "leaf" ? 1 : countLeaves(n.a) + countLeaves(n.b);
-}
+});

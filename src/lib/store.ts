@@ -1,54 +1,49 @@
-import { makeAutoObservable } from "mobx";
+// store.ts
+import { makeAutoObservable, observable } from "mobx";
 import type { Node, LeafNode, SplitNode, Dir } from "./types";
 
 const randColor = () => `hsl(${Math.floor(Math.random() * 360)} 70% 50%)`;
 const uid = () => Math.random().toString(36).slice(2, 9);
 
+const makeLeaf = (color = randColor()): LeafNode =>
+  observable.object({ id: uid(), kind: "leaf" as const, color });
+
+const makeSplit = (dir: Dir, a: Node, b: Node, ratio = 0.5): SplitNode =>
+  observable.object({ id: uid(), kind: "split" as const, dir, ratio, a, b });
+
 export class PaneStore {
-  root: Node;
+  root: Node = makeLeaf();
 
   constructor() {
-    this.root = { id: uid(), kind: "leaf", color: randColor() };
-    makeAutoObservable(this);
+    makeAutoObservable(this, {}, { autoBind: true });
+  }
+
+  get leafCount() {
+    return this.countLeaves(this.root);
   }
 
   split(nodeId: string, dir: Dir) {
+    console.log("[split]", { nodeId, dir });
     const path = this.findPath(nodeId);
     if (!path) return;
     const target = path[path.length - 1].node;
     if (target.kind !== "leaf") return;
 
-    const existing = target as LeafNode; // keep old color
-    const newLeaf: LeafNode = { id: uid(), kind: "leaf", color: randColor() };
-
-    const replacement: SplitNode = {
-      id: uid(),
-      kind: "split",
-      dir,
-      ratio: 0.5,
-      a: existing,
-      b: newLeaf,
-    };
-
+    const existing = target; // already observable
+    const replacement = makeSplit(dir, existing, makeLeaf(), 0.5);
     this.replaceAtPath(path, replacement);
   }
 
   remove(nodeId: string) {
-    if (this.countLeaves(this.root) <= 1) return; // keep at least one
-
+    if (this.leafCount <= 1) return;
     const path = this.findPath(nodeId);
     if (!path) return;
-    const target = path[path.length - 1].node;
-    if (target.kind !== "leaf") return;
+    if (path.length === 1) return; // root leaf
 
-    if (path.length === 1) return; // target is root
-
-    const parentPath = path.slice(0, -1);
-    const parent = parentPath[parentPath.length - 1].node;
-    if (parent.kind !== "split") return;
-
+    const parent = path[path.length - 2].node as SplitNode;
     const sibling = parent.a.id === nodeId ? parent.b : parent.a;
-    this.replaceAtPath(parentPath, sibling);
+    // sibling is already an observable node (no wrapping needed)
+    this.replaceAtPath(path.slice(0, -1), sibling);
   }
 
   resize(splitId: string, nextRatio: number) {
@@ -56,19 +51,19 @@ export class PaneStore {
     if (!path) return;
     const node = path[path.length - 1].node;
     if (node.kind !== "split") return;
-
-    const snapped = this.snapRatio(nextRatio);
-    node.ratio = Math.max(0.1, Math.min(0.9, snapped)); // keep some min size
+    const marks = [0.25, 0.5, 0.75];
+    const EPS = 0.02;
+    const snap = marks.find((m) => Math.abs(nextRatio - m) <= EPS);
+    const snapped = snap ?? nextRatio;
+    node.ratio = Math.max(0.1, Math.min(0.9, snapped)); // observable write
   }
 
-  // ---- helpers ----
-
+  // --- helpers unchanged (countLeaves, replaceAtPath, findPath) ---
   private countLeaves(n: Node): number {
     return n.kind === "leaf"
       ? 1
       : this.countLeaves(n.a) + this.countLeaves(n.b);
   }
-
   private replaceAtPath(path: { id: string; node: Node }[], replacement: Node) {
     if (path.length === 1) {
       this.root = replacement;
@@ -79,7 +74,6 @@ export class PaneStore {
     if (parent.a.id === targetId) parent.a = replacement;
     else parent.b = replacement;
   }
-
   private findPath(id: string) {
     const stack: { id: string; node: Node }[] = [];
     const dfs = (n: Node): boolean => {
@@ -93,13 +87,6 @@ export class PaneStore {
       return false;
     };
     return dfs(this.root) ? stack : null;
-  }
-
-  private snapRatio(x: number) {
-    const marks = [0.25, 0.5, 0.75];
-    const EPS = 0.02; // 2% snap window
-    for (const m of marks) if (Math.abs(x - m) <= EPS) return m;
-    return x;
   }
 }
 
